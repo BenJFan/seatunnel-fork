@@ -94,7 +94,11 @@ public class ServerExecuteCommand implements Command<ServerCommandArgs> {
                 return true;
             }
         } else {
-            return !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_1_8);
+            try {
+                return !SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_1_8);
+            } catch (Exception e) {
+                return false;
+            }
         }
     }
 }

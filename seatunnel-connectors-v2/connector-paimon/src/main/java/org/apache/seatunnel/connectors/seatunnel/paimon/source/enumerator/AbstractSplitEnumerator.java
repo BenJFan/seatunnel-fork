@@ -21,6 +21,7 @@ import org.apache.seatunnel.shade.com.google.common.util.concurrent.ThreadFactor
 
 import org.apache.seatunnel.api.source.SourceSplitEnumerator;
 import org.apache.seatunnel.common.utils.SeaTunnelException;
+import org.apache.seatunnel.common.utils.concurrent.CompletableFuture;
 import org.apache.seatunnel.connectors.seatunnel.paimon.source.PaimonSourceSplit;
 import org.apache.seatunnel.connectors.seatunnel.paimon.source.PaimonSourceSplitGenerator;
 import org.apache.seatunnel.connectors.seatunnel.paimon.source.PaimonSourceState;
@@ -44,7 +45,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 

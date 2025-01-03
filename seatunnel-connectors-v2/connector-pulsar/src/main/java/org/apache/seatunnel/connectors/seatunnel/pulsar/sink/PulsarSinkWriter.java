@@ -27,6 +27,7 @@ import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.api.table.type.SeaTunnelRowType;
 import org.apache.seatunnel.common.exception.CommonErrorCode;
 import org.apache.seatunnel.common.exception.CommonErrorCodeDeprecated;
+import org.apache.seatunnel.common.utils.concurrent.CompletableFuture;
 import org.apache.seatunnel.connectors.seatunnel.pulsar.config.PulsarClientConfig;
 import org.apache.seatunnel.connectors.seatunnel.pulsar.config.PulsarConfigUtil;
 import org.apache.seatunnel.connectors.seatunnel.pulsar.config.PulsarSemantics;
@@ -51,7 +52,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
@@ -137,7 +137,8 @@ public class PulsarSinkWriter
             typedMessageBuilder.sendAsync();
         } else {
             pendingMessages.incrementAndGet();
-            CompletableFuture<MessageId> future = typedMessageBuilder.sendAsync();
+            CompletableFuture<MessageId> future =
+                    new CompletableFuture<>(typedMessageBuilder.sendAsync());
             future.whenComplete(
                     (id, ex) -> {
                         pendingMessages.decrementAndGet();

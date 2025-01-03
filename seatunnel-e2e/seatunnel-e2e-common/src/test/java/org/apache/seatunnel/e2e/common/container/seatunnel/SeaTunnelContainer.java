@@ -390,6 +390,7 @@ public class SeaTunnelContainer extends AbstractTestContainer {
     private static boolean isSystemThread(String s) {
         Pattern aqsThread = Pattern.compile("pool-[0-9]-thread-[0-9]");
         return s.startsWith("hz.main")
+                || s.startsWith("SeaTunnel-CompletableFuture-Thread")
                 || s.startsWith("seatunnel-coordinator-service")
                 || s.startsWith("GC task thread")
                 || s.contains("CompilerThread")

@@ -17,6 +17,7 @@
 
 package org.apache.seatunnel.e2e.connector.doris;
 
+import org.apache.seatunnel.common.utils.concurrent.CompletableFuture;
 import org.apache.seatunnel.connectors.doris.exception.DorisConnectorErrorCode;
 import org.apache.seatunnel.e2e.common.container.ContainerExtendedFactory;
 import org.apache.seatunnel.e2e.common.container.EngineType;
@@ -33,7 +34,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
@@ -75,7 +75,8 @@ public class DorisErrorIT extends AbstractDorisIT {
                             }
                         });
         // wait for the job to start
-        Thread.sleep(10 * 1000);
+        Thread.sleep(20 * 1000);
+        log.info("starting stop container");
         super.container.stop();
         Assertions.assertNotEquals(0, future.get().getExitCode());
         Assertions.assertTrue(
@@ -86,8 +87,8 @@ public class DorisErrorIT extends AbstractDorisIT {
                 future.get()
                         .getStderr()
                         .contains(
-                                "at org.apache.seatunnel.connectors.doris.sink.writer.RecordBuffer.checkErrorMessageByStreamLoad"));
-        log.info("doris error log: \n" + future.get().getStderr());
+                                "at org.apache.seatunnel.connectors.doris.sink.writer.RecordBuffer.checkErrorMessageByStreamLoad"),
+                "doris error log: \n" + future.get().getStderr());
         super.container.start();
         // wait for the container to restart
         given().pollInterval(20, TimeUnit.SECONDS)
