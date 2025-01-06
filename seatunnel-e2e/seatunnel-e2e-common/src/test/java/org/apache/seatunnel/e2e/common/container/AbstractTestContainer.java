@@ -221,14 +221,25 @@ public abstract class AbstractTestContainer implements TestContainer {
         }
 
         if (execResult.getExitCode() != 0) {
-            LOG.info(
-                    "Container[{}] command {} Server Log:"
-                            + "\n==================== Server Log start ====================\n"
-                            + "{}"
-                            + "\n==================== Server Log end   ====================",
-                    container.getDockerImageName(),
-                    commandStr,
-                    container.getLogs());
+            if (this.identifier().getEngineType().equals(EngineType.FLINK)) {
+                LOG.info(
+                        "Container[{}] command {} Job/TaskManager Log:"
+                                + "\n==================== Job/TaskManager Log start ====================\n"
+                                + "{}"
+                                + "\n==================== Job/TaskManager Log end   ====================",
+                        container.getDockerImageName(),
+                        commandStr,
+                        this.getServerLogs());
+            } else {
+                LOG.info(
+                        "Container[{}] command {} Server Log:"
+                                + "\n==================== Server Log start ====================\n"
+                                + "{}"
+                                + "\n==================== Server Log end   ====================",
+                        container.getDockerImageName(),
+                        commandStr,
+                        container.getLogs());
+            }
         }
 
         return execResult;
