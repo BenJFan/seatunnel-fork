@@ -17,6 +17,8 @@
 
 package org.apache.seatunnel.e2e.connector.maxcompute;
 
+import org.apache.seatunnel.shade.com.google.common.collect.Lists;
+
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.source.SeaTunnelSource;
 import org.apache.seatunnel.api.source.SourceSplit;
@@ -28,9 +30,10 @@ import org.apache.seatunnel.e2e.common.TestSuiteBase;
 import org.apache.seatunnel.e2e.common.container.TestContainer;
 
 import org.awaitility.Awaitility;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestTemplate;
 import org.testcontainers.containers.Container;
@@ -68,14 +71,17 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
 
     private GenericContainer<?> maxcompute;
 
+    private static final int HOST_PORT = 8080;
+    private static final int LOCAL_PORT = 8180;
+
     private static final String IMAGE = "maxcompute/maxcompute-emulator:v0.0.7";
 
-    @BeforeEach
+    @BeforeAll
     @Override
     public void startUp() throws Exception {
         this.maxcompute =
                 new GenericContainer<>(IMAGE)
-                        .withExposedPorts(8080)
+                        .withExposedPorts(HOST_PORT)
                         .withNetwork(NETWORK)
                         .withNetworkAliases("maxcompute")
                         .waitingFor(
@@ -83,6 +89,9 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
                                         ".*Started MaxcomputeEmulatorApplication.*\\n", 1))
                         .withLogConsumer(
                                 new Slf4jLogConsumer(DockerLoggerFactory.getLogger(IMAGE)));
+        maxcompute.setPortBindings(
+                Lists.newArrayList(String.format("%s:%s", LOCAL_PORT, HOST_PORT)));
+
         Startables.deepStart(Stream.of(this.maxcompute)).join();
         log.info("MaxCompute container started");
         Awaitility.given()
@@ -93,7 +102,7 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
         initTable();
     }
 
-    @AfterEach
+    @AfterAll
     @Override
     public void tearDown() throws Exception {
         if (this.maxcompute != null) {
@@ -104,9 +113,9 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
     public Odps getTestOdps() {
         Account account = new AliyunAccount("ak", "sk");
         Odps odps = new Odps(account);
-        odps.setEndpoint(getEndpoint());
+        odps.setEndpoint(getEndpoint(LOCAL_PORT));
         odps.setDefaultProject("mocked_mc");
-        odps.setTunnelEndpoint(getEndpoint());
+        odps.setTunnelEndpoint(getEndpoint(LOCAL_PORT));
         return odps;
     }
 
@@ -116,7 +125,7 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
     }
 
     private void initTable() throws Exception {
-        sendPOST(getEndpoint() + "/init", getEndpoint());
+        prepareLocal();
 
         Odps odps = getTestOdps();
         createTableWithData(odps, "test_table");
@@ -126,17 +135,23 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
         Assertions.assertTrue(odps.tables().exists("mocked_mc", "test_table_2"));
     }
 
+    private void prepareLocal() throws IOException {
+        sendPOST(getEndpoint(LOCAL_PORT) + "/init", getEndpoint(LOCAL_PORT));
+    }
+
+    private void prepareContainer() throws IOException {
+        sendPOST(getEndpoint(LOCAL_PORT) + "/init", getEndpoint(HOST_PORT));
+    }
+
     private static void createTableWithData(Odps odps, String tableName) throws OdpsException {
         Instance instance =
-                SQLTask.run(
-                        odps,
-                        "create table mocked_mc." + tableName + " (id INT, name STRING, age INT);");
+                SQLTask.run(odps, "create table " + tableName + " (id INT, name STRING, age INT);");
         instance.waitForSuccess();
         Assertions.assertTrue(odps.tables().exists(tableName));
         Instance insert =
                 SQLTask.run(
                         odps,
-                        "insert into mocked_mc."
+                        "insert into "
                                 + tableName
                                 + " values (1, 'test', 20), (2, 'test2', 30), (3, 'test3', 40);");
         insert.waitForSuccess();
@@ -144,12 +159,12 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
     }
 
     private static List<Record> queryTable(Odps odps, String tableName) throws OdpsException {
-        Instance instance = SQLTask.run(odps, "select * from mocked_mc." + tableName + ";");
+        Instance instance = SQLTask.run(odps, "select * from " + tableName + ";");
         instance.waitForSuccess();
         return SQLTask.getResult(instance);
     }
 
-    private String getEndpoint() {
+    private String getEndpoint(int port) {
         String ip;
         if (maxcompute.getHost().equals("localhost")) {
             try {
@@ -160,15 +175,19 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
         } else {
             ip = maxcompute.getHost();
         }
-        return "http://" + ip + ":" + maxcompute.getFirstMappedPort();
+        return "http://" + ip + ":" + port;
     }
 
     @TestTemplate
+    @Disabled(
+            "maxcompute-emulator does not support upload session for now, we need move to upsert session in MaxComputeWriter")
     public void testMaxCompute(TestContainer container)
             throws IOException, InterruptedException, OdpsException {
         Odps odps = getTestOdps();
         odps.tables().delete("mocked_mc", "test_table_sink", true);
+        prepareContainer();
         Container.ExecResult execResult = container.executeJob("/maxcompute_to_maxcompute.conf");
+        prepareLocal();
         Assertions.assertEquals(0, execResult.getExitCode());
         Assertions.assertEquals(3, odps.tables().get("test_table_sink").getRecordNum());
         List<Record> records = queryTable(odps, "test_table_sink");
@@ -185,13 +204,17 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
     }
 
     @TestTemplate
+    @Disabled(
+            "maxcompute-emulator does not support upload session for now, we need move to upsert session in MaxComputeWriter")
     public void testMaxComputeMultiTable(TestContainer container)
             throws OdpsException, IOException, InterruptedException {
         Odps odps = getTestOdps();
         odps.tables().delete("mocked_mc", "test_table_sink", true);
         odps.tables().delete("mocked_mc", "test_table_2_sink", true);
+        prepareContainer();
         Container.ExecResult execResult =
                 container.executeJob("/maxcompute_to_maxcompute_multi_table.conf");
+        prepareLocal();
         Assertions.assertEquals(0, execResult.getExitCode());
         Assertions.assertEquals(3, queryTable(odps, "test_table_sink").size());
         Assertions.assertEquals(3, queryTable(odps, "test_table_2_sink").size());
@@ -202,10 +225,10 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
         Map<String, Object> config = new HashMap<>();
         config.put("accessId", "ak");
         config.put("accesskey", "sk");
-        config.put("endpoint", "http://localhost:8080/api");
+        config.put("endpoint", getEndpoint(LOCAL_PORT));
         config.put("project", "mocked_mc");
         config.put("table_name", "test_table");
-        config.put("read_columns", Arrays.asList("id", "name"));
+        config.put("read_columns", Arrays.asList("ID", "NAME"));
         SeaTunnelSource<Object, SourceSplit, Serializable> source =
                 new MaxcomputeSourceFactory()
                         .createSource(
@@ -215,11 +238,11 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
                         .createSource();
         CatalogTable table = source.getProducedCatalogTables().get(0);
         Assertions.assertArrayEquals(
-                new String[] {"id", "name"}, table.getTableSchema().getFieldNames());
+                new String[] {"ID", "NAME"}, table.getTableSchema().getFieldNames());
     }
 
     // here use java http client to send post, okhttp or other http client can also be used
-    public static void sendPOST(String postUrl, String postData) throws Exception {
+    public static void sendPOST(String postUrl, String postData) throws IOException {
         URL url = new URL(postUrl);
 
         HttpURLConnection httpURLConnection = (HttpURLConnection) url.openConnection();
