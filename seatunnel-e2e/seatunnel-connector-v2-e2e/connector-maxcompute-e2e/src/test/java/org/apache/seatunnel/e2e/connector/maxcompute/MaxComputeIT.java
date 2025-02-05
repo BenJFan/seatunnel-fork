@@ -18,9 +18,10 @@
 package org.apache.seatunnel.e2e.connector.maxcompute;
 
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
+import org.apache.seatunnel.api.source.SeaTunnelSource;
+import org.apache.seatunnel.api.source.SourceSplit;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.factory.TableSourceFactoryContext;
-import org.apache.seatunnel.connectors.seatunnel.maxcompute.source.MaxcomputeSource;
 import org.apache.seatunnel.connectors.seatunnel.maxcompute.source.MaxcomputeSourceFactory;
 import org.apache.seatunnel.e2e.common.TestResource;
 import org.apache.seatunnel.e2e.common.TestSuiteBase;
@@ -49,7 +50,11 @@ import com.aliyun.odps.task.SQLTask;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.Serializable;
+import java.net.HttpURLConnection;
 import java.net.InetAddress;
+import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -100,7 +105,7 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
         Account account = new AliyunAccount("ak", "sk");
         Odps odps = new Odps(account);
         odps.setEndpoint(getEndpoint());
-        odps.setDefaultProject("project");
+        odps.setDefaultProject("mocked_mc");
         odps.setTunnelEndpoint(getEndpoint());
         return odps;
     }
@@ -110,14 +115,15 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
         Assertions.assertFalse(odps.tables().exists("test_table"));
     }
 
-    private void initTable() throws OdpsException, IOException {
+    private void initTable() throws Exception {
+        sendPOST(getEndpoint() + "/init", getEndpoint());
+
         Odps odps = getTestOdps();
         createTableWithData(odps, "test_table");
         createTableWithData(odps, "test_table_2");
     }
 
-    private static void createTableWithData(Odps odps, String tableName)
-            throws OdpsException, IOException {
+    private static void createTableWithData(Odps odps, String tableName) throws OdpsException {
         Instance instance =
                 SQLTask.run(odps, "create table " + tableName + " (id INT, name STRING, age INT);");
         instance.waitForSuccess();
@@ -156,7 +162,7 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
     public void testMaxCompute(TestContainer container)
             throws IOException, InterruptedException, OdpsException {
         Odps odps = getTestOdps();
-        odps.tables().delete("project", "test_table_sink", true);
+        odps.tables().delete("mocked_mc", "test_table_sink", true);
         Container.ExecResult execResult = container.executeJob("/maxcompute_to_maxcompute.conf");
         Assertions.assertEquals(0, execResult.getExitCode());
         Assertions.assertEquals(3, odps.tables().get("test_table_sink").getRecordNum());
@@ -177,8 +183,8 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
     public void testMaxComputeMultiTable(TestContainer container)
             throws OdpsException, IOException, InterruptedException {
         Odps odps = getTestOdps();
-        odps.tables().delete("project", "test_table_sink", true);
-        odps.tables().delete("project", "test_table_2_sink", true);
+        odps.tables().delete("mocked_mc", "test_table_sink", true);
+        odps.tables().delete("mocked_mc", "test_table_2_sink", true);
         Container.ExecResult execResult =
                 container.executeJob("/maxcompute_to_maxcompute_multi_table.conf");
         Assertions.assertEquals(0, execResult.getExitCode());
@@ -192,18 +198,38 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
         config.put("accessId", "ak");
         config.put("accesskey", "sk");
         config.put("endpoint", "http://maxcompute:8080/api");
-        config.put("project", "project");
+        config.put("project", "mocked_mc");
         config.put("table_name", "test_table");
         config.put("read_columns", Arrays.asList("id", "name"));
-        MaxcomputeSource source =
-                (MaxcomputeSource)
-                        new MaxcomputeSourceFactory()
-                                .createSource(
-                                        new TableSourceFactoryContext(
-                                                ReadonlyConfig.fromMap(config),
-                                                Thread.currentThread().getContextClassLoader()));
+        SeaTunnelSource<Object, SourceSplit, Serializable> source =
+                new MaxcomputeSourceFactory()
+                        .createSource(
+                                new TableSourceFactoryContext(
+                                        ReadonlyConfig.fromMap(config),
+                                        Thread.currentThread().getContextClassLoader()))
+                        .createSource();
         CatalogTable table = source.getProducedCatalogTables().get(0);
         Assertions.assertArrayEquals(
                 new String[] {"id", "name"}, table.getTableSchema().getFieldNames());
+    }
+
+    // here use java http client to send post, okhttp or other http client can also be used
+    public static void sendPOST(String postUrl, String postData) throws Exception {
+        URL url = new URL(postUrl);
+
+        HttpURLConnection httpURLConnection = (HttpURLConnection) url.openConnection();
+        httpURLConnection.setRequestMethod("POST");
+        httpURLConnection.setDoOutput(true);
+        httpURLConnection.setRequestProperty("Content-Type", "application/json");
+        httpURLConnection.setRequestProperty("Content-Length", String.valueOf(postData.length()));
+
+        try (OutputStream outputStream = httpURLConnection.getOutputStream()) {
+            outputStream.write(postData.getBytes("UTF-8"));
+            outputStream.flush();
+        }
+        int responseCode = httpURLConnection.getResponseCode();
+        if (responseCode != HttpURLConnection.HTTP_OK) {
+            throw new RuntimeException("POST request failed with response code: " + responseCode);
+        }
     }
 }
