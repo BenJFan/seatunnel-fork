@@ -121,17 +121,22 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
         Odps odps = getTestOdps();
         createTableWithData(odps, "test_table");
         createTableWithData(odps, "test_table_2");
+        Assertions.assertTrue(odps.projects().exists("mocked_mc"));
+        Assertions.assertTrue(odps.tables().exists("mocked_mc", "test_table"));
+        Assertions.assertTrue(odps.tables().exists("mocked_mc", "test_table_2"));
     }
 
     private static void createTableWithData(Odps odps, String tableName) throws OdpsException {
         Instance instance =
-                SQLTask.run(odps, "create table " + tableName + " (id INT, name STRING, age INT);");
+                SQLTask.run(
+                        odps,
+                        "create table mocked_mc." + tableName + " (id INT, name STRING, age INT);");
         instance.waitForSuccess();
         Assertions.assertTrue(odps.tables().exists(tableName));
         Instance insert =
                 SQLTask.run(
                         odps,
-                        "insert into "
+                        "insert into mocked_mc."
                                 + tableName
                                 + " values (1, 'test', 20), (2, 'test2', 30), (3, 'test3', 40);");
         insert.waitForSuccess();
@@ -139,7 +144,7 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
     }
 
     private static List<Record> queryTable(Odps odps, String tableName) throws OdpsException {
-        Instance instance = SQLTask.run(odps, "select * from " + tableName + ";");
+        Instance instance = SQLTask.run(odps, "select * from mocked_mc." + tableName + ";");
         instance.waitForSuccess();
         return SQLTask.getResult(instance);
     }
@@ -197,7 +202,7 @@ public class MaxComputeIT extends TestSuiteBase implements TestResource {
         Map<String, Object> config = new HashMap<>();
         config.put("accessId", "ak");
         config.put("accesskey", "sk");
-        config.put("endpoint", "http://maxcompute:8080/api");
+        config.put("endpoint", "http://localhost:8080/api");
         config.put("project", "mocked_mc");
         config.put("table_name", "test_table");
         config.put("read_columns", Arrays.asList("id", "name"));
