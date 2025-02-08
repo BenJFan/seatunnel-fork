@@ -237,9 +237,9 @@ public class JobMaster {
         ClassLoader appClassLoader = Thread.currentThread().getContextClassLoader();
 
         List<Set<URL>> logicalVertexJarsList = jobImmutableInformation.getLogicalVertexJarsList();
-        List<ClassLoader> classLoaders = new ArrayList<>();
+        List<ClassLoader> logicalVertexClassLoaders = new ArrayList<>();
         for (Set<URL> urls : logicalVertexJarsList) {
-            classLoaders.add(
+            logicalVertexClassLoaders.add(
                     seaTunnelServer
                             .getClassLoaderService()
                             .getClassLoader(jobImmutableInformation.getJobId(), urls));
@@ -248,12 +248,12 @@ public class JobMaster {
                 DAGUtils.restoreLogicalDag(
                         jobImmutableInformation,
                         nodeEngine.getSerializationService(),
-                        classLoaders);
+                        logicalVertexClassLoaders);
 
-        Map<Long, ClassLoader> classLoaderMap = new HashMap<>();
+        Map<Long, ClassLoader> logicalVertexIdClassLoaderMap = new HashMap<>();
         int i = 0;
         for (Long id : logicalDag.getLogicalVertexMap().keySet()) {
-            classLoaderMap.put(id, classLoaders.get(i++));
+            logicalVertexIdClassLoaderMap.put(id, logicalVertexClassLoaders.get(i++));
         }
         try {
             if (!restart
@@ -268,7 +268,8 @@ public class JobMaster {
                                 sink -> {
                                     Thread.currentThread()
                                             .setContextClassLoader(
-                                                    classLoaderMap.get(sink.getId()));
+                                                    logicalVertexIdClassLoaderMap.get(
+                                                            sink.getId()));
                                     JobMaster.handleSaveMode(
                                             ((SinkAction<?, ?, ?, ?>) sink).getSink());
                                 });

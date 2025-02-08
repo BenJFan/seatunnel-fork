@@ -33,7 +33,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -59,7 +58,7 @@ public class LogicalDag implements IdentifiedDataSerializable {
 
     @Getter private JobConfig jobConfig;
     private final Set<LogicalEdge> edges = new LinkedHashSet<>();
-    private final Map<Long, LogicalVertex> logicalVertexMap = new LinkedHashMap<>();
+    private final LinkedHashMap<Long, LogicalVertex> logicalVertexMap = new LinkedHashMap<>();
     private IdGenerator idGenerator;
     private boolean isStartWithSavePoint = false;
 
@@ -82,7 +81,7 @@ public class LogicalDag implements IdentifiedDataSerializable {
         return this.edges;
     }
 
-    public Map<Long, LogicalVertex> getLogicalVertexMap() {
+    public LinkedHashMap<Long, LogicalVertex> getLogicalVertexMap() {
         return logicalVertexMap;
     }
 
